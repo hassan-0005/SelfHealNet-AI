@@ -1,79 +1,108 @@
-from flask import Flask, render_template, jsonify
-import random
+import streamlit as st
+import pandas as pd
 import time
-from threading import Thread
+import random
 from datetime import datetime
 
-app = Flask(__name__)
+# Page Configuration
+st.set_page_config(page_title="AI Self-Healing Network", layout="wide")
 
-# Global state
-network_data = {
-    "logs": [],
-    "status": "Healthy",
-    "is_healing": False,
-    "blocked_ips": set()
-}
+# Custom CSS for Cyber Security Look
+st.markdown("""
+    <style>
+    .main { background-color: #0e1117; }
+    .stMetric { background-color: #161b22; border: 1px solid #30363d; padding: 15px; border-radius: 10px; }
+    .status-healthy { color: #238636; font-weight: bold; }
+    .status-attack { color: #f85149; font-weight: bold; animation: blinker 1s linear infinite; }
+    @keyframes blinker { 50% { opacity: 0; } }
+    </style>
+    """, unsafe_allow_html=True)
 
-def ai_engine():
-    """Background AI Engine that monitors and heals the network"""
-    possible_ips = ["192.168.1.15", "10.0.0.5", "172.16.25.10", "192.168.1.100"]
+# Initialize Session State (To store data across refreshes)
+if 'logs' not in st.session_state:
+    st.session_state.logs = []
+if 'blocked_ips' not in st.session_state:
+    st.session_state.blocked_ips = set()
+if 'system_status' not in st.session_state:
+    st.session_state.system_status = "Healthy"
+
+# --- UI Header ---
+st.title("🛡️ Sentinel AI: Self-Healing Network")
+st.write("Autonomous Threat Detection & Mitigation System")
+
+# --- Sidebar Controls ---
+st.sidebar.header("Network Settings")
+monitoring = st.sidebar.toggle("Start Monitoring", value=True)
+sensitivity = st.sidebar.slider("AI Sensitivity (Threshold)", 50, 150, 100)
+
+if st.sidebar.button("Clear Logs"):
+    st.session_state.logs = []
+    st.session_state.blocked_ips = set()
+    st.session_state.system_status = "Healthy"
+
+# --- Main Dashboard ---
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("System Status", st.session_state.system_status)
+with col2:
+    st.metric("Blocked Threats", len(st.session_state.blocked_ips))
+with col3:
+    st.metric("Network Uptime", "99.9%")
+
+# Placeholder for real-time content
+chart_placeholder = st.empty()
+log_placeholder = st.empty()
+
+# --- Simulation & Logic Loop ---
+if monitoring:
+    possible_ips = ["192.168.1.45", "10.0.0.7", "172.16.5.12", "192.168.1.102"]
     
+    # Infinite loop to simulate real-time traffic
     while True:
-        if not network_data["is_healing"]:
-            src_ip = random.choice(possible_ips)
-            # Simulate packet load
-            packet_load = random.randint(20, 150)
-            timestamp = datetime.now().strftime("%H:%M:%S")
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        src_ip = random.choice(possible_ips)
+        load = random.randint(20, 160)
+        
+        status = "Normal"
+        
+        # AI Detection Logic
+        if load > sensitivity and src_ip not in st.session_state.blocked_ips:
+            status = "🚨 ATTACK DETECTED"
+            st.session_state.system_status = f"Healing: Blocking {src_ip}"
             
-            status = "Normal"
-            # AI Logic: If load > 100 and IP not already blocked
-            if packet_load > 100 and src_ip not in network_data["blocked_ips"]:
-                status = "⚠️ ATTACK DETECTED"
-                network_data["status"] = f"Analyzing Attack from {src_ip}..."
-                network_data["is_healing"] = True
-                
-                # Add attack log
-                network_data["logs"].append({"time": timestamp, "ip": src_ip, "packets": packet_load, "status": status})
-                
-                # Start Healing Process
-                time.sleep(3) # AI processing time
-                network_data["status"] = f"Healing: Blocking {src_ip} via Firewall..."
-                time.sleep(3) # Action time
-                
-                network_data["blocked_ips"].add(src_ip)
-                network_data["logs"].append({
-                    "time": datetime.now().strftime("%H:%M:%S"), 
-                    "ip": "SYSTEM", 
-                    "packets": 0, 
-                    "status": "✅ HEALED: IP Restricted"
-                })
-                network_data["status"] = "Healthy"
-                network_data["is_healing"] = False
-            else:
-                # Normal traffic
-                network_data["logs"].append({"time": timestamp, "ip": src_ip, "packets": packet_load, "status": status})
-
-        # Keep only last 12 logs
-        if len(network_data["logs"]) > 12:
-            network_data["logs"].pop(0)
+            # Record the attack
+            st.session_state.logs.append({"Time": timestamp, "Source IP": src_ip, "Load": load, "Status": status})
             
-        time.sleep(2)
+            # UI Update for attack
+            with log_placeholder.container():
+                st.error(f"⚠️ High Traffic detected from {src_ip}! Initializing Self-Healing...")
+            
+            time.sleep(2) # Healing delay
+            st.session_state.blocked_ips.add(src_ip)
+            st.session_state.logs.append({"Time": datetime.now().strftime("%H:%M:%S"), "Source IP": "SYSTEM", "Load": 0, "Status": "✅ HEALED: IP Blocked"})
+            st.session_state.system_status = "Healthy"
+        else:
+            if src_ip in st.session_state.blocked_ips:
+                status = "Filtered (Blocked)"
+                load = 0
+            st.session_state.logs.append({"Time": timestamp, "Source IP": src_ip, "Load": load, "Status": status})
 
-# Start AI Engine in background
-Thread(target=ai_engine, daemon=True).start()
+        # Keep only last 15 logs
+        if len(st.session_state.logs) > 15:
+            st.session_state.logs.pop(0)
 
-@app.route('/')
-def home():
-    return render_template('index.html')
+        # --- Update Dashboard Visuals ---
+        df = pd.DataFrame(st.session_state.logs)
+        
+        with chart_placeholder.container():
+            st.subheader("Live Traffic Analysis")
+            if not df.empty:
+                st.line_chart(df.set_index("Time")["Load"])
 
-@app.route('/api/data')
-def get_data():
-    return jsonify({
-        "logs": network_data["logs"],
-        "status": network_data["status"],
-        "blocked_count": len(network_data["blocked_ips"])
-    })
+        with log_placeholder.container():
+            st.subheader("Network Event Logs")
+            st.table(df.iloc[::-1]) # Show latest logs on top
 
-if __name__ == '__main__':
-    # Flask ko run karne ka sahi tareeqa
-    app.run(debug=True, port=5000)
+        time.sleep(1) # Simulation speed
+else:
+    st.info("Monitoring Paused. Click 'Start Monitoring' in sidebar.")
