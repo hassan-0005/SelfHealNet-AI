@@ -1,1 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Self-Healing Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #0f172a; color: white; }
+        .card { background-color: #1e293b; border: none; color: white; }
+        .status-healthy { color: #10b981; font-weight: bold; }
+        .status-danger { color: #ef4444; font-weight: bold; }
+        .status-healing { color: #f59e0b; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>🚀 AI Self-Healing Network</h1>
+            <h3 id="sys-status" class="status-healthy">System: Healthy</h3>
+        </div>
 
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <div class="card p-3">
+                    <h5>Network Traffic Live Graph</h5>
+                    <canvas id="trafficChart" height="100"></canvas>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card p-3 h-100">
+                    <h5>AI Decision Engine</h5>
+                    <p class="text-muted small">Status: Active & Monitoring...</p>
+                    <hr>
+                    <div id="ai-logs" class="small">
+                        <!-- AI logs will appear here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card p-3">
+            <h5>Real-time Traffic Logs</h5>
+            <table class="table table-dark table-hover mt-2">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Source IP</th>
+                        <th>Packets/sec</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="log-table">
+                    <!-- Logs will be injected here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Chart Configuration
+        const ctx = document.getElementById('trafficChart').getContext('2d');
+        const trafficChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Packets Per Second',
+                    data: [],
+                    borderColor: '#3b82f6',
+                    tension: 0.4
+                }]
+            },
+            options: { scales: { y: { beginAtZero: true } } }
+        });
+
+        // Function to update the dashboard
+        async function updateDashboard() {
+            const response = await fetch('/api/status');
+            const data = await response.json();
+
+            // Update Status Text
+            const statusEl = document.getElementById('sys-status');
+            statusEl.innerText = "System: " + data.status;
+            statusEl.className = data.status.includes("Healthy") ? "status-healthy" : 
+                                 data.status.includes("Healing") ? "status-healing" : "status-danger";
+
+            // Update Table
+            const tableBody = document.getElementById('log-table');
+            tableBody.innerHTML = '';
+            data.logs.slice().reverse().forEach(log => {
+                const row = `<tr>
+                    <td>${log.time}</td>
+                    <td>${log.ip}</td>
+                    <td>${log.packets}</td>
+                    <td class="${log.status.includes('ATTACK') ? 'text-danger' : 'text-success'}">${log.status}</td>
+                </tr>`;
+                tableBody.innerHTML += row;
+            });
+
+            // Update Chart
+            if (data.logs.length > 0) {
+                const latest = data.logs[data.logs.length - 1];
+                if (trafficChart.data.labels.length > 15) {
+                    trafficChart.data.labels.shift();
+                    trafficChart.data.datasets[0].data.shift();
+                }
+                trafficChart.data.labels.push(latest.time);
+                trafficChart.data.datasets[0].data.push(latest.packets);
+                trafficChart.update();
+            }
+        }
+
+        // Refresh every 2 seconds
+        setInterval(updateDashboard, 2000);
+    </script>
+</body>
+</html>
