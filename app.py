@@ -6,67 +6,74 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# Global variables to store network state
-network_logs = []
-system_status = "Healthy"
-attack_detected = False
+# Global state
+network_data = {
+    "logs": [],
+    "status": "Healthy",
+    "is_healing": False,
+    "blocked_ips": set()
+}
 
-# Simulated AI Model Logic
-def ai_monitor():
-    global system_status, attack_detected
-    ips = ["192.168.1.5", "10.0.0.2", "172.16.0.4", "192.168.1.10"]
+def ai_engine():
+    """Background AI Engine that monitors and heals the network"""
+    possible_ips = ["192.168.1.15", "10.0.0.5", "172.16.25.10", "192.168.1.100"]
     
     while True:
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        src_ip = random.choice(ips)
-        packet_count = random.randint(10, 100)
-        
-        # AI Detection Logic (Threshold based simulation)
-        status = "Normal"
-        if packet_count > 85:  # Simulation: high packet count = DDoS attack
-            status = "ATTACK DETECTED"
-            system_status = "Under Attack"
-            attack_detected = True
-        
-        log_entry = {
-            "time": timestamp,
-            "ip": src_ip,
-            "packets": packet_count,
-            "status": status
-        }
-        
-        network_logs.append(log_entry)
-        if len(network_logs) > 10: network_logs.pop(0) # Keep last 10 logs
+        if not network_data["is_healing"]:
+            src_ip = random.choice(possible_ips)
+            # Simulate packet load
+            packet_load = random.randint(20, 150)
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            
+            status = "Normal"
+            # AI Logic: If load > 100 and IP not already blocked
+            if packet_load > 100 and src_ip not in network_data["blocked_ips"]:
+                status = "⚠️ ATTACK DETECTED"
+                network_data["status"] = f"Analyzing Attack from {src_ip}..."
+                network_data["is_healing"] = True
+                
+                # Add attack log
+                network_data["logs"].append({"time": timestamp, "ip": src_ip, "packets": packet_load, "status": status})
+                
+                # Start Healing Process
+                time.sleep(3) # AI processing time
+                network_data["status"] = f"Healing: Blocking {src_ip} via Firewall..."
+                time.sleep(3) # Action time
+                
+                network_data["blocked_ips"].add(src_ip)
+                network_data["logs"].append({
+                    "time": datetime.now().strftime("%H:%M:%S"), 
+                    "ip": "SYSTEM", 
+                    "packets": 0, 
+                    "status": "✅ HEALED: IP Restricted"
+                })
+                network_data["status"] = "Healthy"
+                network_data["is_healing"] = False
+            else:
+                # Normal traffic
+                network_data["logs"].append({"time": timestamp, "ip": src_ip, "packets": packet_load, "status": status})
 
-        # Self-Healing Action
-        if attack_detected:
-            time.sleep(2) # System "thinking" time
-            system_status = "Healing: Blocking IP " + src_ip
-            time.sleep(3)
-            system_status = "Healthy"
-            attack_detected = False
-            network_logs.append({
-                "time": datetime.now().strftime("%H:%M:%S"),
-                "ip": "SYSTEM",
-                "packets": 0,
-                "status": "HEALED: IP Blocked"
-            })
+        # Keep only last 12 logs
+        if len(network_data["logs"]) > 12:
+            network_data["logs"].pop(0)
+            
+        time.sleep(2)
 
-        time.sleep(2) # Monitor every 2 seconds
-
-# Start the background AI monitor
-Thread(target=ai_monitor, daemon=True).start()
+# Start AI Engine in background
+Thread(target=ai_engine, daemon=True).start()
 
 @app.route('/')
-def index():
+def home():
     return render_template('index.html')
 
-@app.route('/api/status')
-def get_status():
+@app.route('/api/data')
+def get_data():
     return jsonify({
-        "logs": network_logs,
-        "status": system_status
+        "logs": network_data["logs"],
+        "status": network_data["status"],
+        "blocked_count": len(network_data["blocked_ips"])
     })
 
 if __name__ == '__main__':
+    # Flask ko run karne ka sahi tareeqa
     app.run(debug=True, port=5000)
